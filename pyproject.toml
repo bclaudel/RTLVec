@@ -1,15 +1,21 @@
 [project]
 name = "structrtl"
 version = "0.1.0"
-description = "Add your description here"
+description = "Self-supervised RTL graph learning with a Yosys-based data pipeline"
 readme = "README.md"
 authors = [
     { name = "Benoit Claudel", email = "benoit.claudel@gmail.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "networkx>=3.7",
+    "numpy>=2.5.3",
+    "pynauty>=2.8.8.1",
+    "scipy>=1.18.1",
     "torch>=2.14.1",
     "torch-geometric>=2.8.0.post1",
+    "tqdm>=4.70.1",
+    "yowasp-yosys>=0.69.0.0.post1233",
 ]
 
 [tool.uv]

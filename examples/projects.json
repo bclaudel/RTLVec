@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "designs": [
+    {
+      "design_id": "example-counter-v1",
+      "project_family": "example-counter",
+      "source_provenance": "StructRTL examples/counter.v",
+      "sources": ["counter.v"],
+      "top": "counter",
+      "include_dirs": [],
+      "defines": {},
+      "parameters": {}
+    },
+    {
+      "design_id": "example-adder-v1",
+      "project_family": "example-adder",
+      "source_provenance": "StructRTL examples/adder.v",
+      "sources": ["adder.v"],
+      "top": "adder",
+      "parameters": {"WIDTH": 8}
+    },
+    {
+      "design_id": "example-select-v1",
+      "project_family": "example-select",
+      "source_provenance": "StructRTL examples/select.v",
+      "sources": ["select.v"],
+      "top": "select_word"
+    },
+    {
+      "design_id": "example-accumulator-v1",
+      "project_family": "example-accumulator",
+      "source_provenance": "StructRTL examples/accumulator.v",
+      "sources": ["adder.v", "accumulator.v"],
+      "top": "accumulator"
+    }
+  ]
+}

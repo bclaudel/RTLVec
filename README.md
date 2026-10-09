@@ -1,43 +1,55 @@
-# 🚀 Getting Started
-### Environment Requirement 🌍
-StructRTL has been implemented and tested on PyTorch 2.7.1 with python 3.10.
+# StructRTL
 
-We recommend you first use ```conda``` to create virtual environment, and install ```pytorch``` following [official installation instructions](https://pytorch.org/). For example:
-```
-conda create -n structrtl python=3.10
-conda activate structrtl
-pip install torch
-```
-Then, you can install ```torch_geometric``` with
-```
-pip install torch_geometric
-```
+Self-supervised RTL graph learning, inspired by
+[Beyond Tokens: Enhancing RTL Quality Estimation via Structural Graph Learning](https://arxiv.org/abs/2508.18730).
+This checkout now uses its own versioned Yosys-based graph representation and
+trains new encoders from scratch. The authors' original graph files remain in
+`data/` as reference artifacts; they are not inputs to the new pipeline.
 
-After that, you can train and evaluate StructRTL using the script:
-```
-python train.py \
---gnn_type gin \
---gnn_hidden_dim 256 \
---gnn_output_dim 256 \
---num_gnn_layers 8 \
---gnn_dropout 0.2 \
---transformer_num_heads 4 \
---transformer_hidden_dim 512 \
---transformer_feedforward_dim 2048 \
---num_transformer_layers 8 \
---transformer_dropout 0.2 \
---model_init_method xavier \
---batch_size 16 \
---num_epochs 2000 \
---k 16 \
---loss_type cb_focal \
---delete_node_width_embedding \
---random_flip_posenc \
---mask_ratio 0.2 \
---stratified_masking \
---learning_rate 2e-5 \
---weight_decay 1e-4
+## Quick start
+
+```bash
+uv sync --locked
+uv run python prepare_data.py validate --manifest examples/projects.json
+uv run python prepare_data.py convert --manifest examples/projects.json --output data/generated
+uv run python prepare_data.py assemble --input data/generated --output data/expanded
+uv run python train.py --data-dir data/expanded --num_epochs 1 \
+  --transformer_num_heads 4 --stratified_masking --random_flip_posenc \
+  --learning_rate 2e-5
 ```
 
-### Special Notes 🤯
-The training and evaluation accuracies for the edge prediction task increase quickly and converge early in the training process. However, the training and evaluation accuracies for the structure-aware masked node modeling task take longer to improve, typically showing significant progress around 500-600 epochs.
+The four included examples exercise combinational logic, selection, registers,
+feedback, and multi-file hierarchy. They are a smoke-test corpus, not enough data
+to establish useful generalization. Add your projects to a manifest using the
+same format, then repeat conversion and assembly.
+
+PyTorch Geometric currently calls TorchScript while importing unused pooling
+classes, producing a Python 3.14 compatibility warning. `pyg_compat.py` filters
+only that specific warning during the dependency import, pending the
+[upstream fix](https://github.com/pyg-team/pytorch_geometric/issues/10697).
+It does not migrate or disable TorchScript; warnings from later TorchScript
+calls and other dependency warnings remain visible.
+
+For a larger corpus, [the DeepCircuitX guide](docs/deepcircuitx.md) describes
+downloading real RTL projects, importing modules, filtering conversion failures,
+and running stage 1 training. Start with:
+
+```bash
+uv run python import_deepcircuitx.py --repos 200 --jobs 8
+```
+
+Yosys is supplied by the locked `yowasp-yosys` dependency, so a system install is
+not required. The converter prefers a native `yosys` if available; use `--yosys`
+to select an executable explicitly. Each toolchain produces a recorded
+preprocessing fingerprint. Use a new output directory when changing toolchains.
+
+Training learns node types and graph connectivity. It saves metrics and best/last
+checkpoints under `saves/joint/`. Physical area/delay regression is future stage-2
+work. [The preprocessing guide](docs/preprocessing.md) describes the graph
+contract, input limits, stable dataset splits, caching and encoder reuse.
+
+## Tests
+
+```bash
+uv run python -m unittest discover -s tests -v
+```

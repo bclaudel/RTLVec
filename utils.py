@@ -63,7 +63,7 @@ def compute_class_weights(dataset, num_classes=32):
             ys_dist[y_int] += 1
             total += 1
     
-    class_weights = [total / ys_dist[i] for i in range(num_classes)]
+    class_weights = [total / ys_dist[i] if i in ys_dist else 0.0 for i in range(num_classes)]
     return torch.tensor(class_weights, dtype=torch.float32)
 
     
@@ -77,10 +77,11 @@ def split_dataset(dataset, val_split=0.2):
 
 
 class SizeAwareBatchSampler(Sampler):
-    def __init__(self, dataset, max_nodes_per_batch, shuffle=True):
+    def __init__(self, dataset, max_nodes_per_batch, shuffle=True, max_graphs=None):
         self.dataset = dataset
         self.max_nodes_per_batch = max_nodes_per_batch
         self.shuffle = shuffle
+        self.max_graphs = max_graphs
         self.graph_sizes = [data.x.size(0) for data in dataset]
 
     def __iter__(self):
@@ -91,7 +92,8 @@ class SizeAwareBatchSampler(Sampler):
         batch, total_nodes = [], 0
         for idx in indices:
             size = self.graph_sizes[idx]
-            if total_nodes + size > self.max_nodes_per_batch and batch:
+            if batch and (total_nodes + size > self.max_nodes_per_batch
+                          or (self.max_graphs is not None and len(batch) >= self.max_graphs)):
                 yield batch
                 batch, total_nodes = [idx], size # hit the node limit, reset batch and total_nodes
             else:
@@ -119,6 +121,9 @@ class ClassBalancedFocalLoss(nn.Module):
         super().__init__()
         effective_num = 1.0 - torch.pow(beta, samples_per_class)
         weights = (1.0 - beta) / (effective_num + 1e-8)
+        weights = torch.where(samples_per_class > 0, weights, 0.0)
+        if not weights.sum() > 0:
+            raise ValueError("Class-balanced loss requires observed training classes")
         self.weights = weights / weights.sum() * len(samples_per_class)  # Normalize
         self.gamma = gamma
 
@@ -156,7 +161,9 @@ def stratified_mask(labels, mask_ratio=0.2, min_per_class=2):
             continue
         num_masked = mask[cls_idx].sum().item()
         if num_masked < min_per_class:
-            extra = cls_idx[torch.randperm(len(cls_idx))[:min(min_per_class, len(cls_idx))]]
+            available = cls_idx[~mask[cls_idx]]
+            needed = min(min_per_class, len(cls_idx)) - num_masked
+            extra = available[torch.randperm(len(available), device=device)[:needed]]
             mask[extra] = True
 
     return mask

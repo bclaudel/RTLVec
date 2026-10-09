@@ -2,7 +2,7 @@ import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GINConv, GATv2Conv, GraphNorm, JumpingKnowledge
+from pyg_compat import GCNConv, GINConv, GATv2Conv, GraphNorm, JumpingKnowledge
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 class SimpleGCN(nn.Module):
@@ -238,6 +238,16 @@ class StaticWidthBitEmbedding(nn.Module):
                 batch_embeddings[i] = self.embeddings[:width].sum(dim=0)
 
         return batch_embeddings
+
+
+class WidthEmbedding(nn.Module):
+    """Encode log-scaled positive widths without capping buses at 32 bits."""
+    def __init__(self, emb_dim=32):
+        super().__init__()
+        self.network = nn.Sequential(nn.Linear(1, emb_dim), nn.ReLU(), nn.Linear(emb_dim, emb_dim))
+
+    def forward(self, widths):
+        return self.network(torch.log2(1 + widths.float()).unsqueeze(-1))
     
 
 class CdfgNN(nn.Module):
@@ -254,7 +264,7 @@ class CdfgNN(nn.Module):
             gnn_input_dim = gnn_input_dim - emb_dim
 
         # Embed node width
-        self.width_embedder = StaticWidthBitEmbedding(num_bits=num_bits, emb_dim=emb_dim)
+        self.width_embedder = WidthEmbedding(emb_dim=emb_dim)
 
         # Stage 1: GNN
         if gnn_type == "gin":
@@ -287,7 +297,7 @@ class CdfgNN(nn.Module):
             nn.Linear(128, 2)  # Binary classification for edge existence
         )
 
-    def forward(self, x, edge_index, batch, pos_enc, mask=None):
+    def encode_nodes(self, x, edge_index, batch, pos_enc, mask=None):
         """
         x: [num_nodes, input_dim] - original node features
         edge_index: [2, num_edges] - COO (coordinate format) format
@@ -315,7 +325,8 @@ class CdfgNN(nn.Module):
         # Step 2: Transformer to get node embeddings
         embeddings = self.transformer(gnn_out, batch, pos_enc, mask)
 
-        # Step 3: Get logits from embeddings
-        type_logits = self.transformer.get_logits(embeddings)
+        return embeddings
 
-        return type_logits
+    def forward(self, x, edge_index, batch, pos_enc, mask=None):
+        embeddings = self.encode_nodes(x, edge_index, batch, pos_enc, mask)
+        return self.transformer.get_logits(embeddings)
