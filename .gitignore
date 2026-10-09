@@ -1,0 +1,32 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv_cache/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# Training outputs
+/saves/
+/checkpoints/
+/runs/
+/wandb/
+*.log
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
