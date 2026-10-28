@@ -17,9 +17,7 @@ dist/
 /checkpoints/
 /runs/
 /wandb/
-/data/generated/
-/data/expanded/
-/data/deepcircuitx/
+/data
 *.log
 
 # Local secrets
