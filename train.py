@@ -111,9 +111,10 @@ def train_joint_epoch(args, model, loader, optimizer,
                 (torch.rand(x.size(0), device=device) < args.mask_ratio))
 
         # forward *with* mask
-        logits_mnm = model(x, edge_index, batch_id, pos_enc, mask)
-        loss_mnm = (loss_fn_mnm(logits_mnm[mask], target_type[mask])
-                    if mask.any() else logits_mnm.sum() * 0)
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+            logits_mnm = model(x, edge_index, batch_id, pos_enc, mask)
+            loss_mnm = (loss_fn_mnm(logits_mnm[mask], target_type[mask])
+                        if mask.any() else logits_mnm.sum() * 0)
 
         preds_mnm = logits_mnm[mask].argmax(1)
         tot_mnm_cor  += (preds_mnm == target_type[mask]).sum().item()
@@ -123,7 +124,8 @@ def train_joint_epoch(args, model, loader, optimizer,
         n_edges   = edge_index.size(1)
         k_mask    = max(1, int(n_edges * args.mask_ratio))
         mask_idx  = torch.randperm(n_edges, device=device)[:k_mask]
-        updated   = model.encode_nodes(x, edge_index, batch_id, pos_enc)
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+            updated = model.encode_nodes(x, edge_index, batch_id, pos_enc)
 
         pos_e = edge_index[:, mask_idx]
         neg_e, pos_trim = generate_negative_edges(pos_e, batch_id, edge_index)
@@ -132,8 +134,9 @@ def train_joint_epoch(args, model, loader, optimizer,
                             torch.zeros(neg_e.size(1),  device=device)]).long()
 
         src, dst = updated[all_e[0]], updated[all_e[1]]
-        edge_logits = model.edge_predictor(torch.cat([src, dst], 1))
-        loss_ep = loss_fn_ep(edge_logits, labels)
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+            edge_logits = model.edge_predictor(torch.cat([src, dst], 1))
+            loss_ep = loss_fn_ep(edge_logits, labels)
 
         preds_ep = edge_logits.argmax(1)
         tot_ep_cor  += (preds_ep == labels).sum().item()
@@ -167,8 +170,10 @@ def validate_mnm(args, model, loader, loss_fn, device):
                     (torch.rand(x.size(0), device=device) < args.mask_ratio))
             if mask.sum() == 0: continue
             num_batches += 1
-            logits = model(x, ei, b, pe, mask)
-            tl += loss_fn(logits[mask], tgt[mask]).item()
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+                logits = model(x, ei, b, pe, mask)
+                loss = loss_fn(logits[mask], tgt[mask])
+            tl += loss.item()
             preds = logits[mask].argmax(1)
             tc += (preds == tgt[mask]).sum().item(); ts += mask.sum().item()
     return tl/max(num_batches,1), tc/max(ts,1)
@@ -184,15 +189,18 @@ def validate_ep(args, model, loader, loss_fn, device):
             x, ei, b, pe = batch.x, batch.edge_index, batch.batch, batch.pos_enc
             n_e   = ei.size(1); k_m = max(1, int(n_e*args.mask_ratio))
             m_idx = torch.randperm(n_e, device=device)[:k_m]
-            upd   = model.encode_nodes(x, ei, b, pe)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+                upd = model.encode_nodes(x, ei, b, pe)
             pos_e = ei[:, m_idx]
             neg_e, pos_trim = generate_negative_edges(pos_e, b, ei)
             all_e = torch.cat([pos_trim, neg_e], 1)
             lbls  = torch.cat([torch.ones(pos_trim.size(1), device=device),
                                torch.zeros(neg_e.size(1),  device=device)]).long()
             src, dst = upd[all_e[0]], upd[all_e[1]]
-            logits = model.edge_predictor(torch.cat([src, dst], 1))
-            tl += loss_fn(logits, lbls).item()
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=args.precision == 'bf16'):
+                logits = model.edge_predictor(torch.cat([src, dst], 1))
+                loss = loss_fn(logits, lbls)
+            tl += loss.item()
             tc += (logits.argmax(1) == lbls).sum().item()
             ts += lbls.size(0)
     return tl/max(num_batches,1), tc/max(ts,1)
@@ -213,6 +221,8 @@ def main():
     set_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
+    if args.precision == 'bf16' and (device.type != 'cuda' or not torch.cuda.is_bf16_supported()):
+        raise ValueError('BF16 training requires a CUDA GPU with BF16 support')
 
     # --- Data ---
     train_set, val_set, dataset_metadata = load_datasets(args.data_dir, mask_ratio=args.mask_ratio)
@@ -242,7 +252,8 @@ def main():
                    num_classes=args.num_classes,
                    pos_enc_dim=args.k,
                    delete_node_width_embedding=args.delete_node_width_embedding,
-                   edge_predictor_input_dim=2 * args.transformer_hidden_dim)
+                   edge_predictor_input_dim=2 * args.transformer_hidden_dim,
+                   attention_layout=args.attention_layout)
     model = CdfgNN(**model_config)
     if args.model_init_method == "xavier":
         model.apply(init_weights_xavier)

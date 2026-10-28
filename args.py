@@ -19,6 +19,8 @@ def parse_args():
     parser.add_argument("--transformer_feedforward_dim", type=int, default=2048, help="feedforward dimension of transformer")
     parser.add_argument("--num_transformer_layers", type=int, default=8, help="number of transformer layers")
     parser.add_argument("--transformer_dropout", type=float, default=0.2, help="dropout rate for transformer")
+    parser.add_argument('--attention-layout', choices=['dense', 'graph'], default='dense', help='dense batch mask or independent graph sequences grouped by size')
+    parser.add_argument('--precision', choices=['fp32', 'bf16'], default='fp32', help='BF16 autocast requires a supported CUDA GPU; weights remain FP32')
     parser.add_argument("--model_init_method", type=str, choices=["xavier", "default"], default="xavier", help="Weight initialization method: xavier or default")
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
     parser.add_argument("--size-aware-batching", "--size_aware_batching", dest="size_aware_batching", action=argparse.BooleanOptionalAction, default=True, help="limit total nodes per batch")

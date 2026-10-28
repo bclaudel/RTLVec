@@ -358,12 +358,18 @@ class ConversionTests(unittest.TestCase):
         self.assertIn('timeout', report['designs'][0]['error'])
 
     def test_training_and_checkpoint_reload(self):
-        run_root = self.root / 'runs'
+        self.check_training_and_checkpoint_reload('dense')
+
+    def test_graph_training_and_checkpoint_reload(self):
+        self.check_training_and_checkpoint_reload('graph')
+
+    def check_training_and_checkpoint_reload(self, layout):
+        run_root = self.root / 'runs' / layout
         argv = ['train.py', '--data-dir', str(self.expanded), '--num_epochs', '1', '--batch_size', '2',
                 '--output-dir', str(run_root), '--gnn_type', 'gin', '--gnn_hidden_dim', '8',
                 '--gnn_output_dim', '8', '--num_gnn_layers', '2', '--transformer_hidden_dim', '8',
                 '--transformer_feedforward_dim', '16', '--transformer_num_heads', '2',
-                '--num_transformer_layers', '1', '--stratified_masking']
+                '--num_transformer_layers', '1', '--stratified_masking', '--attention-layout', layout]
         with patch.object(sys, 'argv', argv), patch('train.torch.cuda.is_available', return_value=False), \
              contextlib.redirect_stdout(io.StringIO()):
             main()

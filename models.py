@@ -136,8 +136,11 @@ class TrialGIN(nn.Module):
 
 
 class TransformerModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, feedforward_dim, num_heads, num_layers, num_classes, pos_enc_dim, dropout):
+    def __init__(self, input_dim, hidden_dim, feedforward_dim, num_heads, num_layers, num_classes, pos_enc_dim, dropout, attention_layout='dense'):
         super(TransformerModel, self).__init__()
+        if attention_layout not in ('dense', 'graph'):
+            raise ValueError('Unknown attention layout')
+        self.attention_layout = attention_layout
         self.embedding = nn.Linear(input_dim, hidden_dim)  # Mapping node features to hidden_dim
         self.mask_embedding = nn.Parameter(torch.randn(hidden_dim))  # Learnable mask embedding
         # Layer normalization for input and positional encodings
@@ -174,8 +177,7 @@ class TransformerModel(nn.Module):
 
         # Step 2: Apply the mask embedding where the mask is True (i.e., for masked nodes)
         if mask is not None:
-            mask_embedding = self.mask_embedding.expand(x.shape[0], -1)  # Expand to match the batch size
-            x[mask == 1] = mask_embedding[mask == 1]  # Replace masked nodes' embeddings with mask embedding
+            x = torch.where(mask[:, None].bool(), self.mask_embedding.to(x.dtype), x)
 
         # Normalize both x and positional encoding
         x = self.ln_input(x)
@@ -184,6 +186,10 @@ class TransformerModel(nn.Module):
             x = x + pos_enc_proj
         else:
             print("No positional encoding provided")
+
+        if self.attention_layout == 'graph':
+            from graph_attention import encode_graph_sequences
+            return encode_graph_sequences(self.transformer_encoder, x, batch)
 
         # Step 3: Create the custom attention mask
         bool_mask = self.create_attention_mask(batch)  # [num_nodes, num_nodes], dtype=bool
@@ -255,7 +261,7 @@ class CdfgNN(nn.Module):
                  gnn_type, gnn_input_dim, gnn_hidden_dim, gnn_output_dim, num_gnn_layers, gnn_num_heads, jk_mode, gnn_dropout,
                  transformer_hidden_dim, transformer_feedforward_dim, transformer_num_heads, num_transformer_layers, transformer_dropout,
                  num_classes, pos_enc_dim, delete_node_width_embedding, edge_predictor_input_dim,
-                 num_bits=32, emb_dim=32):
+                 num_bits=32, emb_dim=32, attention_layout='dense'):
         super().__init__()
 
         self.delete_node_width_embedding = delete_node_width_embedding
@@ -283,7 +289,8 @@ class CdfgNN(nn.Module):
             num_layers=num_transformer_layers,
             num_classes=num_classes,
             pos_enc_dim=pos_enc_dim,
-            dropout=transformer_dropout
+            dropout=transformer_dropout,
+            attention_layout=attention_layout
         )
 
         # Stage 3: Edge predictor - single layer for edge prediction task

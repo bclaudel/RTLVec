@@ -50,6 +50,9 @@ contract, input limits, stable dataset splits, caching and encoder reuse.
 
 ## Tests
 
+See [training performance](docs/performance.md) for BF16 execution, optional
+per-graph attention, and the reproducible RTX 5090 benchmark.
+
 ```bash
 uv run python -m unittest discover -s tests -v
 ```
